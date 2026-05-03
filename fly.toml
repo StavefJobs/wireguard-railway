@@ -1,0 +1,34 @@
+app = 'wireguard-ssh'
+primary_region = 'sin'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[env]
+  WG_ADDRESS = '10.7.0.1/24'
+  WG_PORT = '51820'
+
+[mounts]
+  source = 'wg_data'
+  destination = '/etc/wireguard'
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 22
+  
+  [[services.ports]]
+    port = '22'
+
+[[services]]
+  protocol = 'udp'
+  internal_port = 51820
+  
+  [[services.ports]]
+    port = '51820'
+
+[metrics]
+  port = 22
+  path = '/'
+
+[scale]
+  min_machines_running = 1

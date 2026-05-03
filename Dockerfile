@@ -1,35 +1,33 @@
-FROM alpine:3.19
+FROM tchung1970/d13:latest
 
-# 安装依赖
-RUN apk add --no-cache \
-    wireguard-tools \
-    wireguard-go \
-    openssh \
-    bash \
-    qrencode \
-    curl \
-    jq
+# 安装 SSH 服务器
+RUN apt-get update && apt-get install -y \
+    openssh-server \
+    sudo \
+    && rm -rf /var/lib/apt/lists/*
 
-# 配置 SSH
-RUN ssh-keygen -A && \
-    echo "PermitRootLogin yes" >> /etc/ssh/sshd_config && \
-    echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config && \
-    echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config
+# 创建 SSH 运行目录
+RUN mkdir -p /run/sshd
 
-# 创建 wireguard 配置目录
-RUN mkdir -p /etc/wireguard /root/.ssh
+# 配置 SSH：允许 root 登录和密码认证
+RUN sed -i 's/#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config && \
+    sed -i 's/#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
+    sed -i 's/UsePAM yes/#UsePAM yes/' /etc/ssh/sshd_config
 
-# 创建启动脚本
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# 创建 entrypoint 脚本
+RUN { \
+    echo '#!/bin/bash -e'; \
+    echo 'ln -fs /usr/share/zoneinfo/${TZ:-Etc/UTC} /etc/localtime'; \
+    echo 'echo "root:${ROOT_PASSWORD:-changeme}" | chpasswd'; \
+    echo 'exec "$@"'; \
+    } > /usr/local/bin/entrypoint.sh && \
+    chmod +x /usr/local/bin/entrypoint.sh
 
-# 创建客户端配置生成脚本
-COPY generate-peer.sh /generate-peer.sh
-RUN chmod +x /generate-peer.sh
+# 设置环境变量
+ENV TZ=Etc/UTC
+ENV ROOT_PASSWORD=changeme
 
-EXPOSE 22 51820/udp
+EXPOSE 22
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD pgrep -x sshd && pgrep -x wireguard-go || exit 1
-
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["/usr/sbin/sshd", "-D"]
